@@ -1,0 +1,243 @@
+import React from 'react';
+import { useState } from 'react';
+
+// --- SVG Icon Components ---
+const SearchIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+);
+const LoaderIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+);
+const MarketAnalystIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m3 12 5 5 6-6 4 4 3-3" /><path d="M3 5v14h18" /></svg>
+);
+const ValueEngineerIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+);
+const QuantAnalystIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /><rect x="2" y="10" width="4" height="10" /><rect x="8" y="15" width="4" height="5" /><rect x="2" y="5" width="4" height="2" /><rect x="8" y="4" width="4" height="8" /><path d="M20 12h-2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2v20" /></svg>
+);
+const HeadOfPricingIcon = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14.5 16.5a2.5 2.5 0 1 1-3 4l-1.5-1.5" /><path d="m18 13-1.5-1.5" /><path d="m6 13-1.5-1.5" /><path d="m12 5 1.5 3L12 11l-1.5-3L12 5Z" /><path d="M20.1 11.4c.8-.2 1.5-.7 1.8-1.4l.4-1.1c.3-.8.3-1.7 0-2.5l-.4-1.1C21.6 4.7 21 4.2 20.1 4s-1.8.8-2.1 1.6l-.4 1.1c-.3.8-.3 1.7 0 2.5l.4 1.1c.3.8 1.1 1.4 2.1 1.6Z" /><path d="M3.9 11.4c-.8-.2-1.5-.7-1.8-1.4l-.4-1.1c-.3-.8-.3-1.7 0-2.5l-.4-1.1C2.4 4.7 3 4.2 3.9 4s1.8.8 2.1 1.6l.4 1.1c.3.8.3 1.7 0 2.5l-.4 1.1c-.3.8-1.1 1.4-2.1 1.6Z" /></svg>
+);
+
+// Main application component
+export default function App() {
+  const [companyInput, setCompanyInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [analysisResults, setAnalysisResults] = useState(null);
+  const [error, setError] = useState(null);
+
+  const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=";
+  const API_KEY = ""; // Canvas will provide this at runtime
+
+  const COMPANY_TIERS_DB = {
+      'microsoft sustainability manager': {
+          qualitative: "An enterprise-grade, comprehensive, and AI-driven solution for ESG data management.",
+          tiers: [{ name: 'Essentials Tier', features: 'Foundational capabilities for managing and calculating environmental data.' }, { name: 'Premium Tier', features: 'Full-featured, high-end solution with advanced tools like full Scope 3 support and Copilot integration.' }],
+      },
+      'co2 analytics': {
+          qualitative: "An automated, AI-driven carbon accounting platform.",
+          tiers: [{ name: 'Small Business', features: 'Core carbon accounting and reporting for small teams.' }, { name: 'Growth', features: 'Expanded features for growing companies, including more integrations and user seats.' }, { name: 'Advanced', features: 'Advanced analytics, supply chain tracking, and dedicated support.' }, { name: 'Enterprise', features: 'Custom solutions, API access, and full support for large corporations with complex needs.' }],
+      },
+      'aplanet': {
+          qualitative: "A comprehensive ESG data management platform focused on compliance and reporting.",
+          tiers: [{ name: 'Standard Tier', features: 'Core data collection and reporting for mid-sized companies.' }, { name: 'Pro Tier', features: 'Advanced analytics, deeper integrations, and dedicated support.' }, { name: 'Enterprise Tier', features: 'Customizable platform with full support for global enterprise clients.' }],
+      },
+  };
+
+  const fetchWithExponentialBackoff = async (url, options, retries = 5) => {
+      try {
+          const response = await fetch(url, options);
+          if (response.status === 429 && retries > 0) {
+              const delay = Math.pow(2, 5 - retries) * 1000 + Math.random() * 1000;
+              console.warn(`Rate limit hit. Retrying in ${Math.round(delay / 1000)}s...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              return fetchWithExponentialBackoff(url, options, retries - 1);
+          }
+          if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+          return response;
+      } catch (e) {
+          if (retries > 0) {
+              const delay = Math.pow(2, 5 - retries) * 1000 + Math.random() * 1000;
+              console.warn(`Fetch error: ${e.message}. Retrying in ${Math.round(delay / 1000)}s...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              return fetchWithExponentialBackoff(url, options, retries - 1);
+          }
+          throw e;
+      }
+  };
+  
+  const generatePrompt = (persona, companyName, companyData, targetTier, otherAnalyses = null) => {
+    const baseInfo = `Company: "${companyName}"\nDescription: ${companyData.qualitative}\nTarget Tier for Analysis: "${targetTier.name}" with features: "${targetTier.features}"\n\n`;
+
+    switch (persona) {
+        case 'MarketAnalyst':
+            return `${baseInfo}Act as a Market Analyst. Analyze the target tier against competitors. Provide a justifiable monthly price range. The 'estimatedPriceRange' field must contain ONLY the price string (e.g., '$5,000 - $7,000/month') with no other text. Keep your 'analysis' concise (under 40 words). Respond in JSON format: {"analysis": "...", "estimatedPriceRange": "..."}`;
+        case 'ValueEngineer':
+            return `${baseInfo}Act as a Value Engineer. Estimate the financial value (ROI) for the customer. Provide a justified monthly price point. The 'justifiedPricePoint' field must contain ONLY the price string (e.g., '$10,000/month'). Keep your 'analysis' concise (under 40 words). Respond in JSON format: {"analysis": "...", "estimatedValueToCustomer": "...", "justifiedPricePoint": "..."}`;
+        case 'QuantAnalyst':
+            return `${baseInfo}Act as a Quantitative Analyst. Simulate Van Westendorp price sensitivity. Provide an optimal monthly price point. The 'optimalPricePoint' field must contain ONLY the price string (e.g., '$8,500/month'). Keep your 'analysis' concise (under 40 words). Respond in JSON format: {"analysis": "...", "optimalPricePoint": "...", "acceptablePriceRange": "..."}`;
+        case 'HeadOfPricing':
+            return `You are the Head of Pricing. You have three reports for "${companyName}"'s "${targetTier.name}" tier: \n\n1. Market Analyst:\n${JSON.stringify(otherAnalyses.marketAnalyst, null, 2)}\n\n2. Value Engineer:\n${JSON.stringify(otherAnalyses.valueEngineer, null, 2)}\n\n3. Quantitative Analyst:\n${JSON.stringify(otherAnalyses.quantitativeAnalyst, null, 2)}\n\nSynthesize these and provide a final recommended monthly price. The 'recommendedPrice' field must contain ONLY the price string (e.g., '$9,000/month'). Explain your reasoning concisely in 'synthesis'. Respond in JSON format: {"synthesis": "...", "recommendedPrice": "...", "confidencePercentage": 0-100}`;
+        default: return '';
+    }
+  };
+
+  const runEnsembleModel = async () => {
+      if (!companyInput) { setError("Please enter a company name."); return; }
+      
+      setIsLoading(true);
+      setProgress(0);
+      setAnalysisResults(null);
+      setError(null);
+      
+      const companyKey = companyInput.toLowerCase().trim();
+      const companyData = COMPANY_TIERS_DB[companyKey];
+
+      if (!companyData) {
+          setError(`Pricing tiers for "${companyInput}" are not available. Please try an example company.`);
+          setIsLoading(false);
+          return;
+      }
+
+      // Focus deep analysis on the "middle" or most representative tier.
+      const targetTier = companyData.tiers.length > 1 ? companyData.tiers[1] : companyData.tiers[0];
+
+      try {
+          setLoadingMessage('Running base models...');
+          setProgress(10);
+          const personas = ['MarketAnalyst', 'ValueEngineer', 'QuantAnalyst'];
+          const baseModelPromises = personas.map(persona => {
+              const prompt = generatePrompt(persona, companyInput, companyData, targetTier);
+              const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } };
+              return fetchWithExponentialBackoff(GEMINI_API_URL + API_KEY, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload)
+              }).then(res => res.json()).then(result => JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text));
+          });
+
+          const [marketAnalyst, valueEngineer, quantitativeAnalyst] = await Promise.all(baseModelPromises);
+          const baseAnalyses = { marketAnalyst, valueEngineer, quantitativeAnalyst };
+          setAnalysisResults(baseAnalyses);
+
+          setLoadingMessage('Synthesizing results...');
+          setProgress(75);
+          const synthesisPrompt = generatePrompt('HeadOfPricing', companyInput, companyData, targetTier, baseAnalyses);
+          const synthesisPayload = { contents: [{ parts: [{ text: synthesisPrompt }] }], generationConfig: { responseMimeType: "application/json" } };
+          const synthesisResponse = await fetchWithExponentialBackoff(GEMINI_API_URL + API_KEY, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(synthesisPayload)
+          });
+          const synthesisResult = await synthesisResponse.json();
+          const headOfPricing = JSON.parse(synthesisResult.candidates?.[0]?.content?.parts?.[0]?.text);
+          
+          setProgress(100);
+          setLoadingMessage('Analysis complete!');
+          setAnalysisResults(prev => ({ ...prev, headOfPricing }));
+
+      } catch (e) {
+          console.error('Error in ensemble model execution:', e);
+          setError(`An error occurred: ${e.message}. The model may have returned an unexpected format. Please try again.`);
+      } finally {
+          setIsLoading(false);
+          setProgress(0);
+      }
+  };
+
+  return (
+      <div className="flex flex-col items-center justify-center p-4 min-h-screen bg-gray-50 font-sans antialiased">
+          <div className="w-full max-w-5xl p-6 sm:p-8 bg-white shadow-2xl rounded-2xl border border-gray-100">
+              <h1 className="text-3xl font-bold text-gray-900 mb-4 text-center">Multi-Persona Price Estimator</h1>
+              <p className="text-gray-600 text-center mb-8">This tool uses a team of AI personas to analyze a product from multiple angles and synthesize a recommended price point.</p>
+
+              <div className="flex flex-col sm:flex-row gap-4 mb-8">
+                  <input id="company-input" type="text" className="flex-1 p-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Microsoft Sustainability Manager, Aplanet" value={companyInput} onChange={(e) => setCompanyInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !isLoading && runEnsembleModel()} disabled={isLoading} />
+                  <button onClick={runEnsembleModel} className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl shadow-lg hover:bg-blue-700 transition disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center justify-center" disabled={isLoading || !companyInput}>
+                      {isLoading ? <LoaderIcon className="animate-spin mr-2" /> : <SearchIcon className="mr-2" />}
+                      {isLoading ? loadingMessage : 'Run Ensemble Analysis'}
+                  </button>
+              </div>
+
+              {isLoading && (
+                  <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
+                      <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.5s ease-in-out' }}></div>
+                  </div>
+              )}
+
+              {error && <div className="p-4 mb-6 bg-red-100 text-red-700 rounded-xl border border-red-200" role="alert"><p className="font-medium">Error:</p><p>{error}</p></div>}
+
+              {analysisResults && (
+                  <div className="space-y-8">
+                      {analysisResults.headOfPricing && (
+                          <section className="bg-green-50 p-6 rounded-2xl border border-green-200">
+                              <div className="flex items-center mb-4">
+                                  <HeadOfPricingIcon className="w-8 h-8 text-green-700 mr-3" />
+                                  <h2 className="text-2xl font-bold text-green-800">Final Recommendation (Head of Pricing)</h2>
+                              </div>
+                              <p className="text-gray-700 mb-4 font-medium">{analysisResults.headOfPricing.synthesis}</p>
+                              <div className="bg-white p-4 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8">
+                                  <div className='flex-1'>
+                                      <p className="text-lg text-gray-600">Recommended Monthly Price:</p>
+                                      <p className="text-3xl font-bold text-green-700 my-1">{analysisResults.headOfPricing.recommendedPrice}</p>
+                                  </div>
+                                  <div className="border-l border-gray-200 h-16 hidden sm:block"></div>
+                                  <div className='flex-1'>
+                                      <p className="text-lg text-gray-600">Confidence:</p>
+                                      <p className="text-3xl font-bold text-green-700 my-1">{analysisResults.headOfPricing.confidencePercentage}%</p>
+                                      <p className="text-xs text-gray-500 mt-1">Based on agreement between the expert analyses.</p>
+                                  </div>
+                              </div>
+                          </section>
+                      )}
+
+                      <div className="grid md:grid-cols-3 gap-6">
+                          {analysisResults.marketAnalyst && <AnalysisCard 
+                              icon={<MarketAnalystIcon />} 
+                              title="Market Analyst"
+                              description="Analyzes the product against competitors and market trends to find a competitive price point."
+                              data={analysisResults.marketAnalyst} 
+                              priceKey="estimatedPriceRange" 
+                          />}
+                          {analysisResults.valueEngineer && <AnalysisCard 
+                              icon={<ValueEngineerIcon />} 
+                              title="Value Engineer" 
+                              description="Estimates the tangible financial benefit (ROI) a customer gets, pricing the product as a fraction of that value."
+                              data={analysisResults.valueEngineer} 
+                              priceKey="justifiedPricePoint" 
+                          />}
+                          {analysisResults.quantitativeAnalyst && <AnalysisCard 
+                              icon={<QuantAnalystIcon />} 
+                              title="Quantitative Analyst" 
+                              description="Simulates consumer price sensitivity to find an optimal price that isn't perceived as too cheap or too expensive."
+                              data={analysisResults.quantitativeAnalyst} 
+                              priceKey="optimalPricePoint" 
+                          />}
+                      </div>
+                  </div>
+              )}
+          </div>
+      </div>
+  );
+}
+
+const AnalysisCard = ({ icon, title, description, data, priceKey }) => (
+    <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 flex flex-col">
+        <div className="flex items-center mb-2">
+            <div className="w-8 h-8 text-gray-600 mr-3">{icon}</div>
+            <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+        </div>
+        <div className="bg-white p-3 rounded-lg text-center mb-4">
+             <p className="text-sm text-gray-500">{priceKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</p>
+            <p className="text-lg font-bold text-blue-600">{data[priceKey]}</p>
+            {data.acceptablePriceRange && <p className="text-xs text-gray-400 mt-1">Acceptable Range: {data.acceptablePriceRange}</p>}
+        </div>
+        <p className="text-xs text-gray-500 italic mb-3">{description}</p>
+        <p className="text-gray-600 text-sm flex-grow">{data.analysis}</p>
+    </div>
+);
+
